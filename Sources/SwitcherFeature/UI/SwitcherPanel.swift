@@ -160,3 +160,4 @@ public final class SwitcherPanel: NSPanel {
         self.hostingView = hosting
     }
 }
+

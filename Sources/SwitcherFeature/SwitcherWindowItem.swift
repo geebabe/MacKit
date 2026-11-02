@@ -46,3 +46,4 @@ public struct SwitcherWindowItem: Identifiable, Sendable, Equatable {
         lhs.isMinimized == rhs.isMinimized
     }
 }
+

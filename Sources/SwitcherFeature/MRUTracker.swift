@@ -39,3 +39,4 @@ public struct MRUTracker: Sendable {
         focusTimestamps = focusTimestamps.filter { activeIDs.contains($0.key) }
     }
 }
+

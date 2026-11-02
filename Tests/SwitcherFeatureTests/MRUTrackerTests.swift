@@ -71,3 +71,4 @@ struct MRUTrackerTests {
         #expect(tracker.lastFocused(windowID: "closed-window") == nil)
     }
 }
+

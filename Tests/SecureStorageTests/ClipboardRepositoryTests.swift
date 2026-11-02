@@ -207,5 +207,71 @@ struct ClipboardRepositoryTests {
         #expect(counts.total == 3)
         #expect(counts.pinned == 2)
     }
+
+    @Test("Tampered payload file fails decryption and rejects corrupted data")
+    func tamperedPayloadDetection() async throws {
+        let (repo, dbURL, payloadsURL) = try await makeRepository()
+        defer { cleanup(dbURL: dbURL, payloadsURL: payloadsURL) }
+
+        let originalData = "Ultra sensitive payload content".data(using: .utf8)!
+        let record = try await repo.saveItem(kind: .text, payload: originalData)
+
+        let payloadPath = payloadsURL.appendingPathComponent(record.encryptedPayloadRef)
+        var fileData = try Data(contentsOf: payloadPath)
+
+        // Corrupt one byte in the ciphertext body
+        let corruptIndex = fileData.count / 2
+        fileData[corruptIndex] ^= 0xFF
+        try fileData.write(to: payloadPath)
+
+        // Attempting to fetch corrupted payload must throw authenticationFailed error
+        await #expect(throws: AppError.self) {
+            _ = try await repo.fetchPayload(for: record)
+        }
+    }
+
+    @Test("Missing payload file throws readFailed error gracefully without crashing")
+    func missingPayloadFileHandling() async throws {
+        let (repo, dbURL, payloadsURL) = try await makeRepository()
+        defer { cleanup(dbURL: dbURL, payloadsURL: payloadsURL) }
+
+        let record = try await repo.saveItem(kind: .text, payload: "Some data".data(using: .utf8)!)
+        let payloadPath = payloadsURL.appendingPathComponent(record.encryptedPayloadRef)
+
+        // Delete payload file from disk behind the repo's back
+        try FileManager.default.removeItem(at: payloadPath)
+
+        await #expect(throws: AppError.self) {
+            _ = try await repo.fetchPayload(for: record)
+        }
+    }
+
+    @Test("Large 25,000-word Unicode document round-trips without truncation or loss")
+    func largeUnicodeContentRoundTrip() async throws {
+        let (repo, dbURL, payloadsURL) = try await makeRepository()
+        defer { cleanup(dbURL: dbURL, payloadsURL: payloadsURL) }
+
+        // Construct 25,000 words of complex Unicode text
+        let wordList = ["Apple", "MacKit", "Swift", "macOS", "🔒", "日本語", "العربية", "🚀", "Data", "Security"]
+        var words: [String] = []
+        for i in 0..<25000 {
+            words.append("\(wordList[i % wordList.count])-\(i)")
+        }
+        let largeText = words.joined(separator: " ")
+        let largeData = largeText.data(using: .utf8)!
+
+        let record = try await repo.saveItem(
+            kind: .text,
+            payload: largeData,
+            metadata: EncryptedItemMetadata(previewText: "Large Unicode Doc", sourceAppName: "Xcode")
+        )
+
+        let retrievedData = try await repo.fetchPayload(for: record)
+        let retrievedText = String(data: retrievedData, encoding: .utf8)
+
+        #expect(retrievedData.count == largeData.count)
+        #expect(retrievedText == largeText)
+    }
 }
+
 

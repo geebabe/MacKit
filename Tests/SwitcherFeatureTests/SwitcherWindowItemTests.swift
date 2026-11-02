@@ -48,3 +48,4 @@ struct SwitcherWindowItemTests {
         #expect(item1 != itemMinimized)
     }
 }
+

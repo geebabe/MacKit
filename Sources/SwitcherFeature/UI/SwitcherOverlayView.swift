@@ -189,3 +189,4 @@ private struct KeyboardBadge: View {
         }
     }
 }
+
