@@ -1,0 +1,31 @@
+# MacKit — .gitignore
+
+# Build products
+.build/
+dist/
+*.o
+*.d
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.xccheckout
+*.moved-aside
+
+# SPM
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.idea/
+.codegraph/
+*.swp
+*~
+
