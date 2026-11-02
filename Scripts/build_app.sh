@@ -39,3 +39,4 @@ codesign --force --deep --sign - "${APP_BUNDLE}"
 echo "==> Verification:"
 codesign --verify --deep --strict "${APP_BUNDLE}"
 echo "==> Successfully created ${APP_BUNDLE}"
+

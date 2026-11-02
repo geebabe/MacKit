@@ -31,11 +31,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let encryptionService = EncryptionService()
     private var databaseService: DatabaseService?
+    private var payloadStore: PayloadStore?
+    private var clipboardRepository: ClipboardRepository?
 
-    // MARK: - Menu bar
+    // MARK: - Menu bar & Global Hotkeys
 
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var globalEventMonitor: Any?
+    private var localEventMonitor: Any?
 
     private let logger = Logger(category: .appCore)
 
@@ -46,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         setupMenuBar()
+        setupGlobalHotkeys()
         permissionMonitor.refresh()
         launchAtLogin.refresh()
 
@@ -57,6 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let globalEventMonitor {
+            NSEvent.removeMonitor(globalEventMonitor)
+        }
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+        }
         Task {
             await stopModules()
         }
@@ -79,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "MacKit"
         }
 
+        updateMenu()
+    }
+
+    public func updateMenu() {
         menu = buildMenu()
         statusItem?.menu = menu
     }
@@ -86,8 +101,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu(title: "MacKit")
 
+        // Quick actions
+        let historyItem = NSMenuItem(title: "Show Clipboard History", action: #selector(toggleClipboardPanel), keyEquivalent: "v")
+        historyItem.keyEquivalentModifierMask = [.option]
+        historyItem.target = self
+        menu.addItem(historyItem)
+
+        let pauseTitle = settings.clipboardPaused ? "Resume Clipboard Recording" : "Pause Clipboard Recording"
+        let pauseItem = NSMenuItem(title: pauseTitle, action: #selector(togglePauseRecording), keyEquivalent: "")
+        pauseItem.target = self
+        menu.addItem(pauseItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Module status section
-        let clipboardItem = NSMenuItem(title: moduleStatusTitle(for: "Clipboard", enabled: settings.clipboardEnabled), action: nil, keyEquivalent: "")
+        let clipboardItem = NSMenuItem(title: moduleStatusTitle(for: "Clipboard", enabled: settings.clipboardEnabled && !settings.clipboardPaused), action: nil, keyEquivalent: "")
         clipboardItem.isEnabled = false
         menu.addItem(clipboardItem)
 
@@ -120,6 +148,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "\(name): \(enabled ? "On" : "Off")"
     }
 
+    @objc private func toggleClipboardPanel() {
+        clipboardModule.togglePanel()
+    }
+
+    @objc private func togglePauseRecording() {
+        settings.clipboardPaused.toggle()
+        clipboardModule.updatePauseState(isPaused: settings.clipboardPaused)
+        updateMenu()
+    }
+
     @objc private func openSettings() {
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -129,30 +167,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    // MARK: - Global Hotkeys (Option+V)
+
+    private func setupGlobalHotkeys() {
+        // Register in ShortcutRegistry for UI display and conflict tracking
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "clipboard.toggle",
+            displayName: "Open Clipboard History",
+            keyEquivalent: "⌥V",
+            modifierFlags: [.option]
+        ))
+
+        // Monitor global key down events across macOS
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleKeyEvent(event)
+        }
+
+        // Monitor local key down events when MacKit is active
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if self?.handleKeyEvent(event) == true {
+                return nil // Consumed
+            }
+            return event
+        }
+    }
+
+    @discardableResult
+    private func handleKeyEvent(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Check for Option+V (keyCode 9 = 'v')
+        if flags == .option && event.keyCode == 9 {
+            clipboardModule.togglePanel()
+            return true
+        }
+        return false
+    }
+
     // MARK: - Module lifecycle
 
     private func startModules() async {
-        // Start SecureStorage first (encryption key must be available before clipboard writes)
+        // 1. Prepare application support directories for storage
+        let fm = FileManager.default
+        let appSupportDir: URL
+        if let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            appSupportDir = base.appendingPathComponent("com.mackit.app")
+        } else {
+            appSupportDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("com.mackit.app")
+        }
+        try? fm.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+
+        let dbURL = appSupportDir.appendingPathComponent("mackit.sqlite")
+        let payloadsURL = appSupportDir.appendingPathComponent("payloads")
+
+        // 2. Prepare Encryption and Database services
         do {
             try await encryptionService.prepareKey()
-            logger.info("Encryption key ready")
+            logger.info("Encryption service ready")
         } catch {
             logger.error("Encryption service failed to prepare: \(error)")
-            // Non-fatal for Milestone 1 — clipboard capture is Milestone 2.
         }
 
-        // Start feature modules
-        await clipboardModule.start(settings: settings, permissionMonitor: permissionMonitor)
+        let db = DatabaseService(databaseURL: dbURL)
+        do {
+            try await db.open()
+            self.databaseService = db
+            logger.info("Database service opened")
+        } catch {
+            logger.error("Database service failed to open: \(error)")
+        }
+
+        let store = PayloadStore(baseDirectory: payloadsURL, encryptionService: encryptionService)
+        self.payloadStore = store
+
+        if let db = self.databaseService {
+            let repo = ClipboardRepository(
+                database: db,
+                encryptionService: encryptionService,
+                payloadStore: store
+            )
+            self.clipboardRepository = repo
+
+            // 3. Start feature modules
+            await clipboardModule.start(settings: settings, repository: repo)
+        }
+
         await windowModule.start(settings: settings)
         await switcherModule.start(settings: settings)
 
-        logger.info("All modules started")
+        logger.info("All modules initialized")
     }
 
     private func stopModules() async {
-        await clipboardModule.stop()
+        clipboardModule.stop()
         await windowModule.stop()
         await switcherModule.stop()
+        if let db = databaseService {
+            await db.close()
+        }
     }
 }
-

@@ -27,3 +27,4 @@ struct PermissionMonitorTests {
         #expect(monitor.accessibilityStatus == .undetermined)
     }
 }
+

@@ -32,7 +32,9 @@ public actor EncryptionService {
 
     // MARK: - Initialisation
 
-    public init() {}
+    public init(inMemoryKey: SymmetricKey? = nil) {
+        self._key = inMemoryKey
+    }
 
     // MARK: - Public interface
 

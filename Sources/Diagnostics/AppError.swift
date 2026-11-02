@@ -136,7 +136,7 @@ public enum Permission: String, Sendable, CaseIterable, CustomStringConvertible 
     }
 }
 
-public enum ClipboardRejectionReason: Sendable, CustomStringConvertible {
+public enum ClipboardRejectionReason: Error, Sendable, Equatable, CustomStringConvertible {
     case payloadTooLarge(kind: String, sizeBytes: Int, limitBytes: Int)
     case unsupportedFormat(String)
     case concealed
