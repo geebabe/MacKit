@@ -4,6 +4,7 @@
 
 import AppKit
 import SwiftUI
+import Carbon
 import AppCore
 import ClipboardFeature
 import WindowFeature
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var settingsWindow: NSWindow?
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
 
@@ -58,10 +60,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await startModules()
         }
 
+        // On launch, if Accessibility is not granted, request prompt and open Settings
+        // so the user immediately receives visual feedback and clear onboarding.
+        if !permissionMonitor.accessibilityStatus.isGranted {
+            permissionMonitor.requestAccessibility()
+            openSettings()
+        }
+
         logger.info("MacKit started")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        GlobalHotkeyManager.shared.unregisterAll()
         if let globalEventMonitor {
             NSEvent.removeMonitor(globalEventMonitor)
         }
@@ -217,9 +227,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowModule.performAction(.restore)
     }
 
-    @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    @objc public func openSettings() {
+        if settingsWindow == nil {
+            let view = SettingsView()
+                .environmentObject(settings)
+                .environmentObject(permissionMonitor)
+                .environmentObject(shortcutRegistry)
+                .environmentObject(launchAtLogin)
+            let hosting = NSHostingController(rootView: view)
+            let window = NSWindow(contentViewController: hosting)
+            window.title = "MacKit Settings"
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.setContentSize(NSSize(width: 580, height: 440))
+            window.center()
+            window.isReleasedWhenClosed = false
+            self.settingsWindow = window
+        }
         NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func quitApp() {
@@ -229,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Global Hotkeys
 
     private func setupGlobalHotkeys() {
-        // Register in ShortcutRegistry for UI display and conflict tracking
+        // 1. Register in ShortcutRegistry for UI display and conflict tracking
         shortcutRegistry.register(ShortcutRegistration(
             id: "clipboard.toggle",
             displayName: "Open Clipboard History",
@@ -273,12 +298,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modifierFlags: [.control, .option]
         ))
 
-        // Monitor global key down events across macOS
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
+        // 2. Register Carbon global hotkeys (intercepts globally without requiring Accessibility)
+        let hotkeyManager = GlobalHotkeyManager.shared
+
+        // Option+V: Clipboard history
+        hotkeyManager.register(
+            id: MacKitHotkeyID.clipboardToggle.rawValue,
+            keyCode: UInt32(kVK_ANSI_V),
+            modifiers: UInt32(optionKey)
+        ) { [weak self] in
+            self?.clipboardModule.togglePanel()
         }
 
-        // Monitor local key down events when MacKit is active
+        // Control+Option+Space: Window Switcher
+        hotkeyManager.register(
+            id: MacKitHotkeyID.switcherToggle.rawValue,
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.switcherModule.toggleSwitcher()
+        }
+
+        // Control+Option+Left: Snap Left
+        hotkeyManager.register(
+            id: MacKitHotkeyID.windowSnapLeft.rawValue,
+            keyCode: UInt32(kVK_LeftArrow),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.windowModule.performAction(.snapLeft)
+        }
+
+        // Control+Option+Right: Snap Right
+        hotkeyManager.register(
+            id: MacKitHotkeyID.windowSnapRight.rawValue,
+            keyCode: UInt32(kVK_RightArrow),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.windowModule.performAction(.snapRight)
+        }
+
+        // Control+Option+Up: Maximize
+        hotkeyManager.register(
+            id: MacKitHotkeyID.windowMaximize.rawValue,
+            keyCode: UInt32(kVK_UpArrow),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.windowModule.performAction(.maximize)
+        }
+
+        // Control+Option+Down: Restore
+        hotkeyManager.register(
+            id: MacKitHotkeyID.windowRestore.rawValue,
+            keyCode: UInt32(kVK_DownArrow),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.windowModule.performAction(.restore)
+        }
+
+        // Control+Option+C: Center
+        hotkeyManager.register(
+            id: MacKitHotkeyID.windowCenter.rawValue,
+            keyCode: UInt32(kVK_ANSI_C),
+            modifiers: UInt32(controlKey | optionKey)
+        ) { [weak self] in
+            self?.windowModule.performAction(.center)
+        }
+
+        // 3. Monitor local key down events when MacKit windows are active
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if self?.handleKeyEvent(event) == true {
                 return nil // Consumed
