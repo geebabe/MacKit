@@ -92,6 +92,15 @@ let package = Package(
         ),
 
         .testTarget(
+            name: "WindowFeatureTests",
+            dependencies: ["WindowFeature", "Diagnostics"],
+            path: "Tests/WindowFeatureTests",
+            swiftSettings: [
+                .unsafeFlags(["-plugin-path", "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing"])
+            ]
+        ),
+
+        .testTarget(
             name: "ClipboardFeatureTests",
             dependencies: ["ClipboardFeature", "SecureStorage", "Diagnostics"],
             path: "Tests/ClipboardFeatureTests",

@@ -81,6 +81,11 @@ public final class AppSettings: ObservableObject {
         didSet { store(.centerShortcut, value: centerShortcut) }
     }
 
+    /// Keyboard shortcut to restore the window frame.
+    @Published public var restoreShortcut: String {
+        didSet { store(.restoreShortcut, value: restoreShortcut) }
+    }
+
     // MARK: - App shell
 
     /// Whether MacKit should launch at login.
@@ -110,6 +115,7 @@ public final class AppSettings: ObservableObject {
         snapRightShortcut = defaults.string(forKey: Key.snapRightShortcut.rawValue) ?? "⌃⌥→"
         maximizeShortcut = defaults.string(forKey: Key.maximizeShortcut.rawValue) ?? "⌃⌥↑"
         centerShortcut = defaults.string(forKey: Key.centerShortcut.rawValue) ?? "⌃⌥C"
+        restoreShortcut = defaults.string(forKey: Key.restoreShortcut.rawValue) ?? "⌃⌥↓"
         launchAtLogin = defaults.bool(forKey: Key.launchAtLogin.rawValue, defaultValue: false)
     }
 
@@ -135,6 +141,7 @@ public final class AppSettings: ObservableObject {
         case snapRightShortcut = "mackit.shortcut.snapRight"
         case maximizeShortcut = "mackit.shortcut.maximize"
         case centerShortcut = "mackit.shortcut.center"
+        case restoreShortcut = "mackit.shortcut.restore"
         case launchAtLogin = "mackit.app.launchAtLogin"
     }
 }

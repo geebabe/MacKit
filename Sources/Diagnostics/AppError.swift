@@ -161,7 +161,7 @@ public enum ClipboardRejectionReason: Error, Sendable, Equatable, CustomStringCo
     }
 }
 
-public enum WindowError: Sendable, CustomStringConvertible {
+public enum WindowError: Error, Sendable, Equatable, CustomStringConvertible {
     case windowNotFound
     case notResizable
     case accessibilityUnavailable(String)

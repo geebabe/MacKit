@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu(title: "MacKit")
 
-        // Quick actions
+        // Clipboard quick actions
         let historyItem = NSMenuItem(title: "Show Clipboard History", action: #selector(toggleClipboardPanel), keyEquivalent: "v")
         historyItem.keyEquivalentModifierMask = [.option]
         historyItem.target = self
@@ -114,14 +114,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Window Manager submenu
+        let windowMenu = NSMenu(title: "Window Manager")
+        let snapLeftItem = NSMenuItem(title: "Snap Left (⌃⌥←)", action: #selector(snapLeft), keyEquivalent: "")
+        snapLeftItem.target = self
+        windowMenu.addItem(snapLeftItem)
+
+        let snapRightItem = NSMenuItem(title: "Snap Right (⌃⌥→)", action: #selector(snapRight), keyEquivalent: "")
+        snapRightItem.target = self
+        windowMenu.addItem(snapRightItem)
+
+        let maximizeItem = NSMenuItem(title: "Maximize (⌃⌥↑)", action: #selector(maximizeWindow), keyEquivalent: "")
+        maximizeItem.target = self
+        windowMenu.addItem(maximizeItem)
+
+        let centerItem = NSMenuItem(title: "Center (⌃⌥C)", action: #selector(centerWindow), keyEquivalent: "")
+        centerItem.target = self
+        windowMenu.addItem(centerItem)
+
+        let restoreItem = NSMenuItem(title: "Restore (⌃⌥↓)", action: #selector(restoreWindow), keyEquivalent: "")
+        restoreItem.target = self
+        windowMenu.addItem(restoreItem)
+
+        let windowParentItem = NSMenuItem(title: "Window Actions", action: nil, keyEquivalent: "")
+        windowParentItem.submenu = windowMenu
+        menu.addItem(windowParentItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Module status section
         let clipboardItem = NSMenuItem(title: moduleStatusTitle(for: "Clipboard", enabled: settings.clipboardEnabled && !settings.clipboardPaused), action: nil, keyEquivalent: "")
         clipboardItem.isEnabled = false
         menu.addItem(clipboardItem)
 
-        let windowItem = NSMenuItem(title: moduleStatusTitle(for: "Window Manager", enabled: settings.windowEnabled), action: nil, keyEquivalent: "")
-        windowItem.isEnabled = false
-        menu.addItem(windowItem)
+        let windowStatusItem = NSMenuItem(title: moduleStatusTitle(for: "Window Manager", enabled: settings.windowEnabled), action: nil, keyEquivalent: "")
+        windowStatusItem.isEnabled = false
+        menu.addItem(windowStatusItem)
 
         let switcherItem = NSMenuItem(title: moduleStatusTitle(for: "Window Switcher", enabled: settings.switcherEnabled), action: nil, keyEquivalent: "")
         switcherItem.isEnabled = false
@@ -148,6 +176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "\(name): \(enabled ? "On" : "Off")"
     }
 
+    // MARK: - Actions
+
     @objc private func toggleClipboardPanel() {
         clipboardModule.togglePanel()
     }
@@ -156,6 +186,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.clipboardPaused.toggle()
         clipboardModule.updatePauseState(isPaused: settings.clipboardPaused)
         updateMenu()
+    }
+
+    @objc private func snapLeft() {
+        windowModule.performAction(.snapLeft)
+    }
+
+    @objc private func snapRight() {
+        windowModule.performAction(.snapRight)
+    }
+
+    @objc private func maximizeWindow() {
+        windowModule.performAction(.maximize)
+    }
+
+    @objc private func centerWindow() {
+        windowModule.performAction(.center)
+    }
+
+    @objc private func restoreWindow() {
+        windowModule.performAction(.restore)
     }
 
     @objc private func openSettings() {
@@ -167,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    // MARK: - Global Hotkeys (Option+V)
+    // MARK: - Global Hotkeys
 
     private func setupGlobalHotkeys() {
         // Register in ShortcutRegistry for UI display and conflict tracking
@@ -176,6 +226,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             displayName: "Open Clipboard History",
             keyEquivalent: "⌥V",
             modifierFlags: [.option]
+        ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "window.snapLeft",
+            displayName: "Snap Left",
+            keyEquivalent: "⌃⌥←",
+            modifierFlags: [.control, .option]
+        ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "window.snapRight",
+            displayName: "Snap Right",
+            keyEquivalent: "⌃⌥→",
+            modifierFlags: [.control, .option]
+        ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "window.maximize",
+            displayName: "Maximize",
+            keyEquivalent: "⌃⌥↑",
+            modifierFlags: [.control, .option]
+        ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "window.center",
+            displayName: "Center",
+            keyEquivalent: "⌃⌥C",
+            modifierFlags: [.control, .option]
+        ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "window.restore",
+            displayName: "Restore",
+            keyEquivalent: "⌃⌥↓",
+            modifierFlags: [.control, .option]
         ))
 
         // Monitor global key down events across macOS
@@ -195,11 +275,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // Check for Option+V (keyCode 9 = 'v')
+
+        // Option+V (keyCode 9 = 'v')
         if flags == .option && event.keyCode == 9 {
             clipboardModule.togglePanel()
             return true
         }
+
+        // Control+Option combinations for Window Manager
+        if flags == [.control, .option] {
+            switch event.keyCode {
+            case 123: // Left Arrow
+                windowModule.performAction(.snapLeft)
+                return true
+            case 124: // Right Arrow
+                windowModule.performAction(.snapRight)
+                return true
+            case 126: // Up Arrow
+                windowModule.performAction(.maximize)
+                return true
+            case 125: // Down Arrow
+                windowModule.performAction(.restore)
+                return true
+            case 8: // 'C' key
+                windowModule.performAction(.center)
+                return true
+            default:
+                break
+            }
+        }
+
         return false
     }
 
@@ -251,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await clipboardModule.start(settings: settings, repository: repo)
         }
 
-        await windowModule.start(settings: settings)
+        windowModule.start(settings: settings)
         await switcherModule.start(settings: settings)
 
         logger.info("All modules initialized")
@@ -259,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopModules() async {
         clipboardModule.stop()
-        await windowModule.stop()
+        windowModule.stop()
         await switcherModule.stop()
         if let db = databaseService {
             await db.close()

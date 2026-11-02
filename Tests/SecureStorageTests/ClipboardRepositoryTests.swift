@@ -208,3 +208,4 @@ struct ClipboardRepositoryTests {
         #expect(counts.pinned == 2)
     }
 }
+

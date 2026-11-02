@@ -33,6 +33,7 @@ struct ShortcutsSettingsTab: View {
                 ShortcutRow(label: "Snap Right", shortcut: settings.snapRightShortcut)
                 ShortcutRow(label: "Maximize", shortcut: settings.maximizeShortcut)
                 ShortcutRow(label: "Center", shortcut: settings.centerShortcut)
+                ShortcutRow(label: "Restore", shortcut: settings.restoreShortcut)
             }
             .disabled(!settings.windowEnabled)
 

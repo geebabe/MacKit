@@ -74,3 +74,4 @@ public struct ClipboardSearch: Sendable {
         return nil
     }
 }
+

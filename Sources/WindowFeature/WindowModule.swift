@@ -1,40 +1,49 @@
 // WindowFeature/WindowModule.swift
 // Window Manager module coordinator.
-// Milestone 1: Module shell and lifecycle.
-// Snap/center/maximize operations implemented in Milestone 3.
+// Orchestrates window snapping, maximization, centering, and restoration.
 
 import Foundation
+import CoreGraphics
 import AppCore
 import Diagnostics
 
-/// Actor-isolated Window Manager module coordinator.
-public actor WindowModule {
+/// MainActor coordinator for the Window Manager module.
+@MainActor
+public final class WindowModule: ObservableObject {
 
-    public private(set) var isActive: Bool = false
+    @Published public private(set) var isActive: Bool = false
+    public let manager = WindowManager()
     private let logger = Logger(category: .window)
+    private var settings: AppSettings?
 
     public init() {}
 
-    public func start(settings: AppSettings) async {
-        guard await settings.windowEnabled else {
-            logger.info("WindowModule is disabled")
+    /// Start the Window Manager module.
+    public func start(settings: AppSettings) {
+        self.settings = settings
+        guard settings.windowEnabled else {
+            isActive = false
+            logger.info("WindowModule is disabled in settings")
             return
         }
         isActive = true
-        logger.info("WindowModule started (operations implemented in Milestone 3)")
+        logger.info("WindowModule started and active")
     }
 
-    public func stop() async {
+    /// Stop the Window Manager module.
+    public func stop() {
         isActive = false
+        manager.restoreStore.clearAll()
         logger.info("WindowModule stopped")
     }
-}
 
-// MARK: - MainActor bridge
-extension WindowModule {
-    @MainActor
-    func start(settings: AppSettings) {
-        Task { await self.start(settings: settings) }
+    /// Execute a window action if the module is active.
+    @discardableResult
+    public func performAction(_ action: WindowAction) -> Result<CGRect, AppError> {
+        guard isActive else {
+            logger.info("Window action '\(action.displayTitle)' ignored: module disabled")
+            return .failure(.moduleDisabled("Window Manager"))
+        }
+        return manager.performAction(action)
     }
 }
-

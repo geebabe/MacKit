@@ -100,3 +100,4 @@ struct ClipboardSearchTests {
         #expect(results.first?.previewText == "macOS Sonoma")
     }
 }
+

@@ -176,3 +176,4 @@ public final class ClipboardPanel: NSPanel {
         self.hostingView = hosting
     }
 }
+

@@ -60,3 +60,4 @@ public struct ClipboardItem: Identifiable, Sendable, Equatable {
         lhs.lastUsedAt == rhs.lastUsedAt
     }
 }
+

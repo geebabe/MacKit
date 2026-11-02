@@ -40,3 +40,4 @@ struct ClipboardItemTests {
         #expect(item1 == item2)
     }
 }
+

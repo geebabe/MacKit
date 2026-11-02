@@ -87,3 +87,4 @@ public struct ClipboardItemRecord: Identifiable, Sendable, Equatable {
         self.encryptionVersion = encryptionVersion
     }
 }
+

@@ -60,3 +60,4 @@ public struct ClipboardFilter: Sendable {
         return .success(())
     }
 }
+
