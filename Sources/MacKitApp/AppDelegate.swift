@@ -107,6 +107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyItem.target = self
         menu.addItem(historyItem)
 
+        let switcherMenuItem = NSMenuItem(title: "Show Window Switcher", action: #selector(toggleSwitcher), keyEquivalent: " ")
+        switcherMenuItem.keyEquivalentModifierMask = [.control, .option]
+        switcherMenuItem.target = self
+        menu.addItem(switcherMenuItem)
+
         let pauseTitle = settings.clipboardPaused ? "Resume Clipboard Recording" : "Pause Clipboard Recording"
         let pauseItem = NSMenuItem(title: pauseTitle, action: #selector(togglePauseRecording), keyEquivalent: "")
         pauseItem.target = self
@@ -180,6 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleClipboardPanel() {
         clipboardModule.togglePanel()
+    }
+
+    @objc private func toggleSwitcher() {
+        switcherModule.toggleSwitcher()
     }
 
     @objc private func togglePauseRecording() {
@@ -257,6 +266,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "⌃⌥↓",
             modifierFlags: [.control, .option]
         ))
+        shortcutRegistry.register(ShortcutRegistration(
+            id: "switcher.toggle",
+            displayName: "Open Window Switcher",
+            keyEquivalent: "⌃⌥Space",
+            modifierFlags: [.control, .option]
+        ))
 
         // Monitor global key down events across macOS
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -299,6 +314,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             case 8: // 'C' key
                 windowModule.performAction(.center)
+                return true
+            case 49: // Space key (Window Switcher)
+                switcherModule.toggleSwitcher()
                 return true
             default:
                 break
@@ -357,7 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         windowModule.start(settings: settings)
-        await switcherModule.start(settings: settings)
+        switcherModule.start(settings: settings)
 
         logger.info("All modules initialized")
     }
@@ -365,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopModules() async {
         clipboardModule.stop()
         windowModule.stop()
-        await switcherModule.stop()
+        switcherModule.stop()
         if let db = databaseService {
             await db.close()
         }

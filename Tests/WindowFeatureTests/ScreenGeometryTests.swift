@@ -144,3 +144,4 @@ struct ScreenGeometryTests {
         #expect(clamped.maxY <= usable.maxY)
     }
 }
+

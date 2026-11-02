@@ -64,3 +64,4 @@ struct WindowRestoreStoreTests {
         #expect(store.getFrame(for: id) == nil)
     }
 }
+

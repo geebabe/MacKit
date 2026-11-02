@@ -26,3 +26,4 @@ struct WindowActionTests {
         #expect(cases.contains(.restore))
     }
 }
+

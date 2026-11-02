@@ -126,3 +126,4 @@ public struct ScreenGeometry: Sendable {
         return clamped
     }
 }
+
