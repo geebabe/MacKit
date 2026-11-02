@@ -16,18 +16,12 @@ public final class ClipboardPanel: NSPanel {
     public var onClearUnpinned: (() -> Void)?
     public var onDismiss: (() -> Void)?
 
-    private var items: [ClipboardItem] = []
-    private var filteredItems: [ClipboardItem] = []
-    private var searchQuery: String = ""
-    private var selectedIndex: Int = 0
-    private var statusBanner: String?
-
-    private let search = ClipboardSearch()
-    private var hostingView: NSHostingView<AnyView>?
+    public let viewModel = ClipboardHistoryViewModel()
+    private let logger = Logger(category: .clipboard)
 
     public init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 480),
             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -43,7 +37,7 @@ public final class ClipboardPanel: NSPanel {
         self.backgroundColor = .clear
         self.hasShadow = true
 
-        rebuildContent()
+        setupContent()
     }
 
     override public var canBecomeKey: Bool { true }
@@ -51,18 +45,15 @@ public final class ClipboardPanel: NSPanel {
 
     /// Update the items list from the module.
     public func updateItems(_ newItems: [ClipboardItem]) {
-        self.items = newItems
-        applySearch()
+        viewModel.updateItems(newItems)
     }
 
     public func setStatusBanner(_ message: String?) {
-        self.statusBanner = message
-        rebuildContent()
+        viewModel.statusBanner = message
     }
 
     /// Present the panel centered on the active display.
     public func present() {
-        applySearch()
         if let screen = NSScreen.main {
             let screenRect = screen.visibleFrame
             let x = screenRect.midX - frame.width / 2
@@ -76,46 +67,55 @@ public final class ClipboardPanel: NSPanel {
     /// Dismiss the panel.
     public func dismiss() {
         orderOut(nil)
-        searchQuery = ""
-        statusBanner = nil
+        viewModel.searchQuery = ""
+        viewModel.statusBanner = nil
         onDismiss?()
     }
 
     // MARK: - Keyboard Event Handling
 
     override public func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Command + 1..9 quick paste
+        if flags == .command {
+            if let index = numberKeyIndex(for: event.keyCode) {
+                if viewModel.filteredItems.indices.contains(index) {
+                    let item = viewModel.filteredItems[index]
+                    onSelectAndPaste?(item)
+                    return
+                }
+            }
+        }
+
         switch event.keyCode {
         case 53: // Escape
             dismiss()
 
         case 126: // Up Arrow
-            if !filteredItems.isEmpty {
-                selectedIndex = max(0, selectedIndex - 1)
-                rebuildContent()
-            }
+            viewModel.selectPrevious()
 
         case 125: // Down Arrow
-            if !filteredItems.isEmpty {
-                selectedIndex = min(filteredItems.count - 1, selectedIndex + 1)
-                rebuildContent()
-            }
+            viewModel.selectNext()
 
         case 36: // Enter / Return
-            if !filteredItems.isEmpty && selectedIndex < filteredItems.count {
-                let item = filteredItems[selectedIndex]
+            if let item = viewModel.selectedItem {
                 onSelectAndPaste?(item)
             }
 
-        case 51: // Backspace / Delete
-            if !filteredItems.isEmpty && selectedIndex < filteredItems.count {
-                let item = filteredItems[selectedIndex]
-                onDelete?(item)
+        case 35: // 'P' key to pin/unpin (when not in search field)
+            if flags.isEmpty, let item = viewModel.selectedItem {
+                onTogglePin?(item)
+                viewModel.applyFilters()
+            } else {
+                super.keyDown(with: event)
             }
 
-        case 35: // 'P' key (toggle pin)
-            if !filteredItems.isEmpty && selectedIndex < filteredItems.count {
-                let item = filteredItems[selectedIndex]
-                onTogglePin?(item)
+        case 51: // Backspace / Delete
+            if flags.contains(.command), let item = viewModel.selectedItem {
+                onDelete?(item)
+            } else {
+                super.keyDown(with: event)
             }
 
         default:
@@ -123,37 +123,26 @@ public final class ClipboardPanel: NSPanel {
         }
     }
 
-    // MARK: - Private Content Management
-
-    private func applySearch() {
-        filteredItems = search.filter(items: items, query: searchQuery)
-        if selectedIndex >= filteredItems.count {
-            selectedIndex = max(0, filteredItems.count - 1)
+    private func numberKeyIndex(for keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case 18: return 0 // '1'
+        case 19: return 1 // '2'
+        case 20: return 2 // '3'
+        case 21: return 3 // '4'
+        case 23: return 4 // '5'
+        case 22: return 5 // '6'
+        case 26: return 6 // '7'
+        case 28: return 7 // '8'
+        case 25: return 8 // '9'
+        default: return nil
         }
-        rebuildContent()
     }
 
-    private func rebuildContent() {
-        let selectedID = filteredItems.indices.contains(selectedIndex) ? filteredItems[selectedIndex].id : nil
+    // MARK: - Private Setup
 
+    private func setupContent() {
         let view = ClipboardHistoryView(
-            items: Binding(get: { self.filteredItems }, set: { _ in }),
-            searchQuery: Binding(
-                get: { self.searchQuery },
-                set: { [weak self] newQuery in
-                    self?.searchQuery = newQuery
-                    self?.applySearch()
-                }
-            ),
-            selectedItemID: Binding(
-                get: { selectedID },
-                set: { [weak self] id in
-                    if let id, let idx = self?.filteredItems.firstIndex(where: { $0.id == id }) {
-                        self?.selectedIndex = idx
-                    }
-                }
-            ),
-            statusBanner: Binding(get: { self.statusBanner }, set: { self.statusBanner = $0 }),
+            viewModel: viewModel,
             onSelectAndPaste: { [weak self] item in
                 self?.onSelectAndPaste?(item)
             },
@@ -171,9 +160,7 @@ public final class ClipboardPanel: NSPanel {
             }
         )
 
-        let hosting = NSHostingView(rootView: AnyView(view))
+        let hosting = NSHostingView(rootView: view)
         self.contentView = hosting
-        self.hostingView = hosting
     }
 }
-
