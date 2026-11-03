@@ -1,12 +1,33 @@
 # MacKit — .gitignore
 
-# Build products
+# Build products & distributions
 .build/
 dist/
 *.o
 *.d
+*.dylib
+*.app
 
-# Xcode
+# Databases, local stores & logs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+*.enc
+*.log
+*.tmp
+*.crash
+*.ips
+
+# Secrets & Local environments
+.env
+.env.*
+*.key
+*.pem
+
+# Xcode & Developer Tools
 *.xcodeproj/
 *.xcworkspace/
 xcuserdata/
@@ -18,14 +39,15 @@ DerivedData/
 .swiftpm/
 Package.resolved
 
-# macOS
+# macOS system files
 .DS_Store
 .AppleDouble
 .LSOverride
+._*
 
-# Editor
+# Editors & Tooling
 .idea/
 .codegraph/
+.vscode/
 *.swp
 *~
-
